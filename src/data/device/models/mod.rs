@@ -51,6 +51,14 @@ pub enum MinerModel {
     AntMiner(AntMinerModel),
     WhatsMiner(WhatsMinerModel),
     Braiins(BraiinsModel),
+    Bitaxe(BitaxeModel),
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub enum BitaxeModel {
+    Supra,
+    Gamma,
+    Max,
+    Ultra
 }
 
 pub(crate) struct MinerModelFactory {

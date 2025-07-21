@@ -1,4 +1,5 @@
 use crate::data::device::MinerHardware;
+use crate::data::device::models::BitaxeModel;
 use crate::data::device::models::antminer::AntMinerModel;
 use crate::data::device::models::braiins::BraiinsModel;
 use crate::data::device::models::whatsminer::WhatsMinerModel;
@@ -1816,6 +1817,33 @@ impl From<&WhatsMinerModel> for MinerHardware {
                 fans: Some(2),
                 boards: Some(3),
             },
+        }
+    }
+}
+
+impl From<&BitaxeModel> for MinerHardware {
+    fn from(model: &BitaxeModel) -> Self {
+        match model {
+            BitaxeModel::Supra => Self {
+                chips: Some(1),
+                fans: Some(1),
+                boards: Some(1),
+            },
+            BitaxeModel::Gamma => Self {
+                chips: Some(1),
+                fans: Some(1),
+                boards: Some(1),
+            },
+            BitaxeModel::Max => Self {
+                chips: Some(1),
+                fans: Some(1),
+                boards: Some(1),
+            },
+            BitaxeModel::Ultra => Self {
+                chips: Some(1),
+                fans: Some(1),
+                boards: Some(1),
+            }
         }
     }
 }

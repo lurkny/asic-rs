@@ -16,6 +16,7 @@ use super::commands::MinerCommand;
 use super::util::{send_rpc_command, send_web_command};
 use crate::data::device::{MinerFirmware, MinerMake, MinerModel};
 use crate::miners::backends::btminer::BTMinerV3Backend;
+use crate::miners::backends::espminer::ESPMiner;
 use crate::miners::backends::traits::GetMinerData;
 use traits::{DiscoveryCommands, ModelSelection};
 
@@ -102,11 +103,12 @@ fn select_backend(
     make: Option<MinerMake>,
     model: Option<MinerModel>,
     firmware: Option<MinerFirmware>,
-) -> Option<Box<impl GetMinerData>> {
+) -> Option<Box<dyn GetMinerData>> {
     match (make, firmware) {
         (Some(MinerMake::WhatsMiner), Some(MinerFirmware::Stock)) => Some(Box::new(
             BTMinerV3Backend::new(ip, model.expect("Could not find model")),
         )),
+        (Some(MinerMake::BitAxe), Some(MinerFirmware::Stock)) => Some(Box::new(ESPMiner::new(ip, model?))),
         _ => None,
     }
 }
@@ -119,7 +121,7 @@ impl MinerFactory {
     pub async fn get_miner(
         self,
         ip: IpAddr,
-    ) -> Result<Option<Box<impl GetMinerData>>, Box<dyn Error>> {
+    ) -> Result<Option<Box<dyn GetMinerData>>, Box<dyn Error>> {
         let search_makes = self.search_makes.clone().unwrap_or(vec![
             MinerMake::AntMiner,
             MinerMake::WhatsMiner,

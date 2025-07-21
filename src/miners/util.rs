@@ -1,5 +1,5 @@
-use reqwest::StatusCode;
 use reqwest::header::HeaderMap;
+use reqwest::StatusCode;
 use std::net::IpAddr;
 use tokio;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -59,6 +59,7 @@ pub(crate) async fn send_web_command(
         Err(_) => None,
     }
 }
+
 
 fn parse_rpc_result(response: &str) -> Option<serde_json::Value> {
     let parsed: Result<serde_json::Value, _> = serde_json::from_str(response);
