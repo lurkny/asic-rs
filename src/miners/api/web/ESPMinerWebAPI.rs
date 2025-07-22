@@ -1,7 +1,11 @@
+use crate::miners::api::ApiClient;
+use async_trait::async_trait;
 use reqwest::{Client, Method, Response};
-use serde_json::Value;
-use std::time::Duration;
+use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde_json::Value;
+use std::error::Error;
+use std::time::Duration;
 use tokio::time::timeout;
 
 /// ESPMiner WebAPI client for communicating with BitAxe and similar miners
@@ -13,6 +17,14 @@ pub struct ESPMinerWebAPI {
     retries: u32,
 }
 
+#[async_trait]
+impl ApiClient for ESPMinerWebAPI {
+    async fn send_command(&self, command: &'static str) -> Result<Value, String> {
+        self.send_command(command, false, false, false, None, Method::GET)
+            .await
+            .map_err(|e| e.to_string())
+    }
+}
 
 impl ESPMinerWebAPI {
     /// Create a new ESPMiner WebAPI client
@@ -44,7 +56,7 @@ impl ESPMinerWebAPI {
     }
 
     /// Send a command to the miner
-    pub async fn send_command<T: DeserializeOwned>(
+    pub async fn send_command(
         &self,
         command: &str,
         ignore_errors: bool,
@@ -52,7 +64,7 @@ impl ESPMinerWebAPI {
         _privileged: bool,
         parameters: Option<Value>,
         method: Method,
-    ) -> Result<T, ESPMinerError> {
+    ) -> Result<Value, ESPMinerError> {
         let url = format!("http://{}:{}/api/{}", self.ip, self.port, command);
 
         for attempt in 0..=self.retries {
@@ -63,7 +75,7 @@ impl ESPMinerWebAPI {
             match result {
                 Ok(response) => {
                     if response.status().is_success() {
-                        match response.json::<T>().await {
+                        match response.json().await {
                             Ok(json_data) => return Ok(json_data),
                             Err(e) => {
                                 if !ignore_errors && attempt == self.retries {
@@ -121,12 +133,11 @@ impl ESPMinerWebAPI {
             .await
             .map_err(|_| ESPMinerError::Timeout)?
             .map_err(|e| ESPMinerError::NetworkError(e.to_string()))?;
-
+        println!("{:?}", response);
         Ok(response)
     }
 
     /// Execute multiple commands simultaneously
-
 
     /// Get system information
     pub async fn system_info(&self) -> Result<Value, ESPMinerError> {

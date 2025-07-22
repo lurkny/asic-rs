@@ -1,2 +1,2 @@
 pub mod ESPMinerWebAPI;
-mod traits;
+pub mod traits;

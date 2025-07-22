@@ -1843,7 +1843,7 @@ impl From<&BitaxeModel> for MinerHardware {
                 chips: Some(1),
                 fans: Some(1),
                 boards: Some(1),
-            }
+            },
         }
     }
 }

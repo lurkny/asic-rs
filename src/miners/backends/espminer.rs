@@ -1,20 +1,25 @@
 use crate::data::board::BoardData;
-use crate::data::device::{
-    DeviceInfo, MinerFirmware, MinerModel,
-};
+use crate::data::device::HashAlgorithm::SHA256;
+use crate::data::device::MinerFirmware::Stock;
+use crate::data::device::MinerMake::BitAxe;
+use crate::data::device::{DeviceInfo, HashAlgorithm, MinerFirmware, MinerModel};
 use crate::data::hashrate::{HashRate, HashRateUnit};
 use crate::data::miner::MinerData;
 use crate::miners::api::web::ESPMinerWebAPI::{ESPMinerError, ESPMinerWebAPI};
 use crate::miners::backends::traits::GetMinerData;
+use crate::miners::data::{DataCollector, DataExtractor, DataField, DataLocation, get_by_key};
 use async_trait::async_trait;
-use std::net::IpAddr;
-use std::str::FromStr;
-use std::time::{Duration, SystemTime};
 use macaddr::MacAddr;
 use measurements::{Frequency, Power, Temperature, Voltage};
 use serde::{Deserialize, Serialize};
-use crate::data::device::HashAlgorithm::SHA256;
-use crate::data::device::MinerMake::BitAxe;
+use serde_json::error::Category::Data;
+use std::collections::HashSet;
+use std::net::IpAddr;
+use std::str::FromStr;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use strum::EnumIter;
+use strum::IntoEnumIterator;
+use tokio::time::Instant;
 
 pub struct ESPMiner {
     model: MinerModel,
@@ -102,100 +107,31 @@ pub struct BitAxeSysInfo {
 #[async_trait]
 impl GetMinerData for ESPMiner {
     async fn get_data(&self) -> MinerData {
-        let system_info_res = self.web.system_info().await
-            .and_then(|val| {
-                serde_json::from_value::<BitAxeSysInfo>(val)
-                    .map_err(|_| ESPMinerError::WebError)
-            });
+        let mut collector = DataCollector::new(self, &self.web);
+        let data = collector.collect(&*vec![DataField::Mac]).await;
 
-        let timestamp = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .map_or(0, |dur| dur.as_secs());
+        println!("{:?}", data);
 
-        let ip = self.web.ip.parse::<IpAddr>().unwrap(); //This really shouldn't fail.
-
-        let device_info = DeviceInfo::new(BitAxe, self.model.clone(), MinerFirmware::Stock, SHA256);
-
-        // Handle error case by returning partial MinerData
-        let sys_info = match system_info_res {
-            Ok(info) => info,
-            Err(_) => {
-                return MinerData {
-                    schema_version: env!("CARGO_PKG_VERSION").to_string(),
-                    timestamp,
-                    ip,
-                    mac: None,
-                    device_info,
-                    serial_number: None,
-                    hostname: None,
-                    api_version: None,
-                    firmware_version: None,
-                    control_board_version: None,
-                    expected_hashboards: None,
-                    hashboards: vec![],
-                    hashrate: None,
-                    expected_chips: None,
-                    total_chips: None,
-                    expected_fans: None,
-                    fans: vec![],
-                    psu_fans: vec![],
-                    average_temperature: None,
-                    fluid_temperature: None,
-                    wattage: None,
-                    wattage_limit: None,
-                    efficiency: None,
-                    light_flashing: None,
-                    messages: vec![],
-                    uptime: None,
-                    is_mining: false,
-                    pools: vec![],
-                };
-            }
-        };
-
-        // Build hashrate if available
-        let hashrate = Some(HashRate {
-            value: sys_info.hashRate,
-            unit: HashRateUnit::GigaHash,
-            algo: "SHA256".to_string(), // Use enum's Display if available, but string for now
-        });
-
-        // Build hashboard data
-        let hashboards = vec![BoardData {
-            position: 0,
-            hashrate: hashrate.clone(),
-            expected_hashrate: Some(HashRate {
-                value: sys_info.expectedHashrate as f64,
-                unit: HashRateUnit::GigaHash,
-                algo: "SHA256".to_string(),
-            }),
-            board_temperature: Some(Temperature::from_celsius(sys_info.temp)),
-            intake_temperature: None,
-            outlet_temperature: None,
-            expected_chips: None,
-            working_chips: None,
-            serial_number: None,
-            chips: vec![],
-            voltage: Some(Voltage::from_volts(sys_info.voltage)), // TODO: Volts or mV?
-            frequency: Some(Frequency::from_megahertz(sys_info.frequency as f64)), // TODO: assuming Mhz here, dont know for sure.
-            tuned: None,
-            active: None,
-        }];
+        // Parse MAC address if available, otherwise set to None
+        let mac = data
+            .get(&DataField::Mac)
+            .and_then(|v| v.as_str())
+            .and_then(|s| MacAddr::from_str(s).ok());
 
         MinerData {
-            schema_version: env!("CARGO_PKG_VERSION").to_string(),
-            timestamp,
-            ip,
-            mac: MacAddr::from_str(&sys_info.macAddr).ok(),
-            device_info,
+            schema_version: "".to_string(),
+            timestamp: 0,
+            ip: self.web.ip.clone().parse().unwrap(),
+            mac,
+            device_info: DeviceInfo::new(BitAxe, self.model.clone(), Stock, HashAlgorithm::SHA256),
             serial_number: None,
-            hostname: Some(sys_info.hostname.clone()),
+            hostname: None,
             api_version: None,
-            firmware_version: None, // TODO: Could set from sys_info.version or sys_info.axeOSVersion
+            firmware_version: None,
             control_board_version: None,
             expected_hashboards: None,
-            hashboards,
-            hashrate,
+            hashboards: vec![],
+            hashrate: None,
             expected_chips: None,
             total_chips: None,
             expected_fans: None,
@@ -203,14 +139,71 @@ impl GetMinerData for ESPMiner {
             psu_fans: vec![],
             average_temperature: None,
             fluid_temperature: None,
-            wattage: Some(Power::from_watts(sys_info.power)),
+            wattage: None,
             wattage_limit: None,
             efficiency: None,
             light_flashing: None,
             messages: vec![],
-            uptime: Some(Duration::from_secs(sys_info.uptimeSeconds)),
-            is_mining: (sys_info.sharesAccepted > 0 || sys_info.sharesRejected > 0) && sys_info.hashRate > 0.0,
-            pools: vec![], // TODO: Could populate from stratumURL
+            uptime: None,
+            is_mining: false,
+            pools: vec![],
+        }
+    }
+
+    fn get_locations(&self, data_field: DataField) -> &'static [DataLocation] {
+        const CMD: &str = "system/info";
+
+        match data_field {
+            DataField::Mac => &[(
+                CMD,
+                DataExtractor {
+                    func: get_by_key,
+                    key: Some("macAddr"),
+                },
+            )],
+            DataField::ApiVersion => &[(
+                CMD,
+                DataExtractor {
+                    func: get_by_key,
+                    key: None,
+                },
+            )],
+            DataField::FwVersion => &[(
+                CMD,
+                DataExtractor {
+                    func: get_by_key,
+                    key: None,
+                },
+            )],
+            DataField::Hostname => &[(
+                CMD,
+                DataExtractor {
+                    func: get_by_key,
+                    key: Some("hostname"),
+                },
+            )],
+            DataField::Hashrate => &[(
+                CMD,
+                DataExtractor {
+                    func: get_by_key,
+                    key: Some("hashRate"),
+                },
+            )],
+            DataField::ExpectedHashrate => &[],
+            DataField::Hashboards => &[],
+            DataField::Wattage => &[(
+                CMD,
+                DataExtractor {
+                    func: get_by_key,
+                    key: Some("power"),
+                },
+            )],
+            DataField::Fans => &[],
+            DataField::Uptime => &[],
+            DataField::Pools => &[],
+            DataField::Errors => &[],
+            DataField::FaultLight => &[],
+            DataField::IsMining => &[],
         }
     }
 }

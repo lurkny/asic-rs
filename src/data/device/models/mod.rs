@@ -58,7 +58,7 @@ pub enum BitaxeModel {
     Supra,
     Gamma,
     Max,
-    Ultra
+    Ultra,
 }
 
 pub(crate) struct MinerModelFactory {

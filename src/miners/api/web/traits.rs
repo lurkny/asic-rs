@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 #[async_trait]
 pub(crate) trait SendWebCommand {
@@ -10,7 +10,6 @@ pub(crate) trait SendWebCommand {
         param: Option<P>,
     ) -> Result<T, Box<dyn std::error::Error>>
     where
-         T: DeserializeOwned,
-         P: Serialize + Send;
-
+        T: DeserializeOwned,
+        P: Serialize + Send;
 }

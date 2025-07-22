@@ -67,7 +67,10 @@ pub(crate) async fn get_model_whatsminer(ip: IpAddr) -> Option<MinerModel> {
 }
 
 pub(crate) async fn get_model_bitaxe(ip: IpAddr) -> Option<MinerModel> {
-    let raw_json = util::send_web_command(&ip, "/api/system/info").await.unwrap().0;
+    let raw_json = util::send_web_command(&ip, "/api/system/info")
+        .await
+        .unwrap()
+        .0;
     let response: serde_json::Value = serde_json::from_str(&raw_json).ok()?;
 
     match response["ASICModel"].as_str() {
@@ -78,7 +81,6 @@ pub(crate) async fn get_model_bitaxe(ip: IpAddr) -> Option<MinerModel> {
         _ => None,
     }
 }
-
 
 pub(crate) async fn get_model_luxos(ip: IpAddr) -> Option<MinerModel> {
     let response = util::send_rpc_command(&ip, "version").await;

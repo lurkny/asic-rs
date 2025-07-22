@@ -108,7 +108,9 @@ fn select_backend(
         (Some(MinerMake::WhatsMiner), Some(MinerFirmware::Stock)) => Some(Box::new(
             BTMinerV3Backend::new(ip, model.expect("Could not find model")),
         )),
-        (Some(MinerMake::BitAxe), Some(MinerFirmware::Stock)) => Some(Box::new(ESPMiner::new(ip, model?))),
+        (Some(MinerMake::BitAxe), Some(MinerFirmware::Stock)) => {
+            Some(Box::new(ESPMiner::new(ip, model?)))
+        }
         _ => None,
     }
 }
