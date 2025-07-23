@@ -17,7 +17,7 @@ pub struct EspWebApi {
 #[async_trait]
 impl ApiClient for EspWebApi {
     async fn send_command(&self, command: &'static str) -> Result<Value, String> {
-        self.send_command(command, false, false, false, None, Method::GET)
+        self.send_command(command, false, None, Method::GET)
             .await
             .map_err(|e| e.to_string())
     }
@@ -56,8 +56,6 @@ impl EspWebApi {
     pub async fn send_command(
         &self,
         command: &str,
-        ignore_errors: bool,
-        _allow_warning: bool,
         _privileged: bool,
         parameters: Option<Value>,
         method: Method,
@@ -75,17 +73,17 @@ impl EspWebApi {
                         match response.json().await {
                             Ok(json_data) => return Ok(json_data),
                             Err(e) => {
-                                if !ignore_errors && attempt == self.retries {
+                                if  attempt == self.retries {
                                     return Err(ESPMinerError::ParseError(e.to_string()));
                                 }
                             }
                         }
-                    } else if !ignore_errors && attempt == self.retries {
+                    } else if  attempt == self.retries {
                         return Err(ESPMinerError::HttpError(response.status().as_u16()));
                     }
                 }
                 Err(e) => {
-                    if !ignore_errors && attempt == self.retries {
+                    if attempt == self.retries {
                         return Err(e);
                     }
                 }
@@ -138,31 +136,31 @@ impl EspWebApi {
 
     /// Get system information
     pub async fn system_info(&self) -> Result<Value, ESPMinerError> {
-        self.send_command("system/info", false, true, false, None, Method::GET)
+        self.send_command("system/info", false, None, Method::GET)
             .await
     }
 
     /// Get swarm information
     pub async fn swarm_info(&self) -> Result<Value, ESPMinerError> {
-        self.send_command("swarm/info", false, true, false, None, Method::GET)
+        self.send_command("swarm/info", false, None, Method::GET)
             .await
     }
 
     /// Restart the system
     pub async fn restart(&self) -> Result<Value, ESPMinerError> {
-        self.send_command("system/restart", false, true, false, None, Method::POST)
+        self.send_command("system/restart", false, None, Method::POST)
             .await
     }
 
     /// Update system settings
     pub async fn update_settings(&self, config: Value) -> Result<Value, ESPMinerError> {
-        self.send_command("system", false, true, false, Some(config), Method::PATCH)
+        self.send_command("system", false, Some(config), Method::PATCH)
             .await
     }
 
     /// Get ASIC information
     pub async fn asic_info(&self) -> Result<Value, ESPMinerError> {
-        self.send_command("system/asic", false, true, false, None, Method::GET)
+        self.send_command("system/asic", false, None, Method::GET)
             .await
     }
 }
@@ -209,6 +207,8 @@ impl std::error::Error for ESPMinerError {}
 mod tests {
     use super::*;
 
+
+    /*
     #[tokio::test]
     async fn test_espminer_api() {
         let api = EspWebApi::new("192.168.1.100".into(), 80)
@@ -221,4 +221,5 @@ mod tests {
             Err(e) => println!("Error getting system info: {}", e),
         }
     }
+     */
 }

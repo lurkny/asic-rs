@@ -35,6 +35,11 @@ pub fn get_by_key(data: &Value, key: Option<&str>) -> Option<Value> {
     data.get(key?.to_string()).cloned()
 }
 
+
+pub fn get_by_pointer(data: &Value, pointer: Option<&str>) -> Option<Value> {
+    data.pointer(pointer?).cloned()
+}
+
 pub struct DataCollector<'a> {
     miner: &'a dyn GetMinerData,
     api_client: &'a dyn ApiClient,

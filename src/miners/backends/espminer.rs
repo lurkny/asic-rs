@@ -119,39 +119,39 @@ impl GetMinerData for ESPMiner {
     }
 
     fn get_locations(&self, data_field: DataField) -> &'static [DataLocation] {
-        const CMD: &str = "system/info";
+        const SYSTEM_INFO_CMD: &str = "system/info";
 
         match data_field {
             DataField::Mac => &[(
-                CMD,
+                SYSTEM_INFO_CMD,
                 DataExtractor {
                     func: get_by_key,
                     key: Some("macAddr"),
                 },
             )],
             DataField::ApiVersion => &[(
-                CMD,
+                SYSTEM_INFO_CMD,
                 DataExtractor {
                     func: get_by_key,
                     key: None,
                 },
             )],
             DataField::FwVersion => &[(
-                CMD,
+                SYSTEM_INFO_CMD,
                 DataExtractor {
                     func: get_by_key,
                     key: None,
                 },
             )],
             DataField::Hostname => &[(
-                CMD,
+                SYSTEM_INFO_CMD,
                 DataExtractor {
                     func: get_by_key,
                     key: Some("hostname"),
                 },
             )],
             DataField::Hashrate => &[(
-                CMD,
+                SYSTEM_INFO_CMD,
                 DataExtractor {
                     func: get_by_key,
                     key: Some("hashRate"),
@@ -160,13 +160,13 @@ impl GetMinerData for ESPMiner {
             DataField::ExpectedHashrate => &[],
             DataField::Hashboards => &[],
             DataField::Wattage => &[(
-                CMD,
+                SYSTEM_INFO_CMD,
                 DataExtractor {
                     func: get_by_key,
                     key: Some("power"),
                 },
             )],
-            DataField::Fans => &[(CMD, DataExtractor{
+            DataField::Fans => &[(SYSTEM_INFO_CMD, DataExtractor{
                 func: get_by_key,
                 key: Some("fanSpeed"),
             })],
