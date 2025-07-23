@@ -205,9 +205,6 @@ impl std::error::Error for ESPMinerError {}
 // Usage example
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-
     /*
     #[tokio::test]
     async fn test_espminer_api() {
