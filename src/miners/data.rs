@@ -2,7 +2,7 @@ use crate::miners::api::ApiClient;
 use crate::miners::backends::traits::GetMinerData;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
-use strum::EnumIter;
+use strum::{EnumIter, IntoEnumIterator};
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Copy, EnumIter)]
 pub enum DataField {
     Mac,
@@ -50,16 +50,16 @@ impl<'a> DataCollector<'a> {
         }
     }
 
-    // Fetches data for a list of requested fields.
+    pub async fn collect_all(&mut self) -> HashMap<DataField, Value> {
+        self.collect(DataField::iter().collect::<Vec<_>>().as_slice()).await
+    }
     pub async fn collect(&mut self, fields: &[DataField]) -> HashMap<DataField, Value> {
         let mut results = HashMap::new();
         let required_commands = self.get_required_commands(fields);
 
         for command in required_commands {
-            if !self.cache.contains_key(command) {
-                if let Ok(response) = self.api_client.send_command(command).await {
-                    self.cache.insert(command.to_string(), response);
-                }
+            if let Ok(response) = self.api_client.send_command(command).await {
+                self.cache.insert(command.to_string(), response);
             }
         }
 

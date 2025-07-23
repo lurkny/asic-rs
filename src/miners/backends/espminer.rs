@@ -10,7 +10,7 @@ use crate::miners::backends::traits::GetMinerData;
 use crate::miners::data::{DataCollector, DataExtractor, DataField, DataLocation, get_by_key};
 use async_trait::async_trait;
 use macaddr::MacAddr;
-use measurements::{Frequency, Power, Temperature, Voltage};
+use measurements::{AngularVelocity, Frequency, Power, Temperature, Voltage};
 use serde::{Deserialize, Serialize};
 use serde_json::error::Category::Data;
 use std::collections::HashSet;
@@ -20,6 +20,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use strum::EnumIter;
 use strum::IntoEnumIterator;
 use tokio::time::Instant;
+use crate::data::fan::FanData;
 
 pub struct ESPMiner {
     model: MinerModel,
@@ -35,113 +36,88 @@ impl ESPMiner {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ShareRejectReason {
-    pub message: String,
-    pub count: u32,
-}
-
-#[allow(non_snake_case)]
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BitAxeSysInfo {
-    pub power: f64,
-    pub voltage: f64,
-    pub current: f64,
-    pub temp: f64,
-    pub vrTemp: u32,
-    pub maxPower: u32,
-    pub nominalVoltage: u32,
-    pub hashRate: f64,
-    pub expectedHashrate: u32,
-    pub bestDiff: String,
-    pub bestSessionDiff: String,
-    pub poolDifficulty: u32,
-    pub isUsingFallbackStratum: u8,
-    pub isPSRAMAvailable: u8,
-    pub freeHeap: u64,
-    pub coreVoltage: u32,
-    pub coreVoltageActual: u32,
-    pub frequency: u32,
-    pub ssid: String,
-    pub macAddr: String,
-    pub hostname: String,
-    pub wifiStatus: String,
-    pub wifiRSSI: i32,
-    pub apEnabled: u8,
-    pub sharesAccepted: u32,
-    pub sharesRejected: u32,
-    pub sharesRejectedReasons: Vec<ShareRejectReason>,
-    pub uptimeSeconds: u64,
-    pub smallCoreCount: u32,
-    #[serde(rename = "ASICModel")]
-    pub asic_model: String,
-    pub stratumURL: String,
-    pub stratumPort: u32,
-    pub stratumUser: String,
-    pub stratumSuggestedDifficulty: u32,
-    pub stratumExtranonceSubscribe: u8,
-    pub fallbackStratumURL: String,
-    pub fallbackStratumPort: u32,
-    pub fallbackStratumUser: String,
-    pub fallbackStratumSuggestedDifficulty: u32,
-    pub fallbackStratumExtranonceSubscribe: u8,
-    pub responseTime: f64,
-    pub version: String,
-    pub axeOSVersion: String,
-    pub idfVersion: String,
-    pub boardVersion: String,
-    pub runningPartition: String,
-    pub overheat_mode: u8,
-    pub overclockEnabled: u8,
-    pub display: String,
-    pub rotation: u8,
-    pub invertscreen: u8,
-    pub displayTimeout: i32,
-    pub autofanspeed: u8,
-    pub fanspeed: u32,
-    pub temptarget: u32,
-    pub fanrpm: u32,
-    pub statsFrequency: u32,
-}
-
 #[async_trait]
 impl GetMinerData for ESPMiner {
     async fn get_data(&self) -> MinerData {
         let mut collector = DataCollector::new(self, &self.web);
-        let data = collector.collect(&*vec![DataField::Mac]).await;
+        let data = collector.collect_all().await;
 
-        println!("{:?}", data);
-
-        // Parse MAC address if available, otherwise set to None
         let mac = data
             .get(&DataField::Mac)
             .and_then(|v| v.as_str())
             .and_then(|s| MacAddr::from_str(s).ok());
 
+        let hostname = data
+            .get(&DataField::Hostname)
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let api_version = data
+            .get(&DataField::ApiVersion)
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let firmware_version = data
+            .get(&DataField::FwVersion)
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let hashrate = data
+            .get(&DataField::Hashrate)
+            .and_then(|v| v.as_f64())
+            .map(|f| HashRate {
+                value: f,
+                unit: HashRateUnit::MegaHash,
+                algo: String::from("SHA256"),
+            });
+
+        let wattage = data
+            .get(&DataField::Wattage)
+            .and_then(|v| v.as_f64())
+            .map(|f| Power::from_watts(f));
+
+        // Calculate efficiency if both hashrate and wattage are available
+        let efficiency = match (hashrate.clone(), wattage.clone()) {
+            (Some(hr), Some(w)) => Some(w / hr),
+            _ => None,
+        };
+
+        // Get current timestamp
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Failed to get system time")
+            .as_secs();
+
+
+        let fans = data.get(&DataField::Fans)
+            .and_then(|v| v.as_f64())
+            .map(|f| vec![FanData { position: 0, rpm: AngularVelocity::from_rpm(f) }])
+            .unwrap_or_default();
+
         MinerData {
-            schema_version: "".to_string(),
-            timestamp: 0,
+            schema_version: env!("CARGO_PKG_VERSION").to_string(),
+            timestamp,
             ip: self.web.ip.clone().parse().unwrap(),
             mac,
             device_info: DeviceInfo::new(BitAxe, self.model.clone(), Stock, HashAlgorithm::SHA256),
             serial_number: None,
-            hostname: None,
-            api_version: None,
-            firmware_version: None,
+            hostname,
+            api_version,
+            firmware_version,
             control_board_version: None,
             expected_hashboards: None,
             hashboards: vec![],
-            hashrate: None,
+            hashrate,
             expected_chips: None,
             total_chips: None,
             expected_fans: None,
-            fans: vec![],
+            fans: fans,
             psu_fans: vec![],
             average_temperature: None,
             fluid_temperature: None,
-            wattage: None,
+            wattage,
             wattage_limit: None,
-            efficiency: None,
+            efficiency,
             light_flashing: None,
             messages: vec![],
             uptime: None,
@@ -198,7 +174,10 @@ impl GetMinerData for ESPMiner {
                     key: Some("power"),
                 },
             )],
-            DataField::Fans => &[],
+            DataField::Fans => &[(CMD, DataExtractor{
+                func: get_by_key,
+                key: Some("fanSpeed"),
+            })],
             DataField::Uptime => &[],
             DataField::Pools => &[],
             DataField::Errors => &[],
