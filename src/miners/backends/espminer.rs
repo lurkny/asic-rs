@@ -5,7 +5,7 @@ use crate::data::device::MinerMake::BitAxe;
 use crate::data::device::{DeviceInfo, HashAlgorithm, MinerFirmware, MinerModel};
 use crate::data::hashrate::{HashRate, HashRateUnit};
 use crate::data::miner::MinerData;
-use crate::miners::api::web::ESPMinerWebAPI::{ESPMinerError, ESPMinerWebAPI};
+use crate::miners::api::web::ESPMinerWebAPI::{ESPMinerError, EspWebApi};
 use crate::miners::backends::traits::GetMinerData;
 use crate::miners::data::{DataCollector, DataExtractor, DataField, DataLocation, get_by_key};
 use async_trait::async_trait;
@@ -24,14 +24,14 @@ use crate::data::fan::FanData;
 
 pub struct ESPMiner {
     model: MinerModel,
-    web: ESPMinerWebAPI,
+    web: EspWebApi,
 }
 
 impl ESPMiner {
     pub fn new(ip: IpAddr, model: MinerModel) -> Self {
         ESPMiner {
             model,
-            web: ESPMinerWebAPI::new(ip.to_string(), 80),
+            web: EspWebApi::new(ip.to_string(), 80),
         }
     }
 }

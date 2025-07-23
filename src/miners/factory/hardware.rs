@@ -1824,26 +1824,11 @@ impl From<&WhatsMinerModel> for MinerHardware {
 impl From<&BitaxeModel> for MinerHardware {
     fn from(model: &BitaxeModel) -> Self {
         match model {
-            BitaxeModel::Supra => Self {
+           _ => Self {
                 chips: Some(1),
                 fans: Some(1),
                 boards: Some(1),
-            },
-            BitaxeModel::Gamma => Self {
-                chips: Some(1),
-                fans: Some(1),
-                boards: Some(1),
-            },
-            BitaxeModel::Max => Self {
-                chips: Some(1),
-                fans: Some(1),
-                boards: Some(1),
-            },
-            BitaxeModel::Ultra => Self {
-                chips: Some(1),
-                fans: Some(1),
-                boards: Some(1),
-            },
+            }
         }
     }
 }

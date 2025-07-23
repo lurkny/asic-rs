@@ -7,6 +7,6 @@ pub mod rpc;
 pub mod web;
 
 #[async_trait]
-pub(crate) trait ApiClient: Send + Sync {
+pub trait ApiClient: Send + Sync {
     async fn send_command(&self, command: &'static str) -> Result<Value, String>;
 }

@@ -9,7 +9,7 @@ use std::time::Duration;
 use tokio::time::timeout;
 
 /// ESPMiner WebAPI client for communicating with BitAxe and similar miners
-pub struct ESPMinerWebAPI {
+pub struct EspWebApi {
     client: Client,
     pub ip: String,
     port: u16,
@@ -18,7 +18,7 @@ pub struct ESPMinerWebAPI {
 }
 
 #[async_trait]
-impl ApiClient for ESPMinerWebAPI {
+impl ApiClient for EspWebApi {
     async fn send_command(&self, command: &'static str) -> Result<Value, String> {
         self.send_command(command, false, false, false, None, Method::GET)
             .await
@@ -26,7 +26,7 @@ impl ApiClient for ESPMinerWebAPI {
     }
 }
 
-impl ESPMinerWebAPI {
+impl EspWebApi {
     /// Create a new ESPMiner WebAPI client
     pub fn new(ip: String, port: u16) -> Self {
         let client = Client::builder()
@@ -215,7 +215,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_espminer_api() {
-        let api = ESPMinerWebAPI::new("192.168.1.100".into(), 80)
+        let api = EspWebApi::new("192.168.1.100".into(), 80)
             .with_timeout(Duration::from_secs(5))
             .with_retries(3);
 
