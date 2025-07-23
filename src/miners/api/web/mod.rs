@@ -1,1 +1,1 @@
-pub mod ESPMinerWebAPI;
+pub mod esp_web_api;

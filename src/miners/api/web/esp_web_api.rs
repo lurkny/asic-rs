@@ -1,10 +1,7 @@
 use crate::miners::api::ApiClient;
 use async_trait::async_trait;
 use reqwest::{Client, Method, Response};
-use serde::Serialize;
-use serde::de::DeserializeOwned;
 use serde_json::Value;
-use std::error::Error;
 use std::time::Duration;
 use tokio::time::timeout;
 
@@ -211,7 +208,6 @@ impl std::error::Error for ESPMinerError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[tokio::test]
     async fn test_espminer_api() {

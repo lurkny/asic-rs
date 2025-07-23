@@ -1,8 +1,6 @@
 use crate::data::miner::MinerData;
 use crate::miners::data::{DataField, DataLocation};
 use async_trait::async_trait;
-use measurements::Data;
-use std::collections::HashSet;
 
 #[async_trait]
 pub trait GetMinerData: Send + Sync {

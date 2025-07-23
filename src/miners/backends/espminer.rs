@@ -1,25 +1,17 @@
-use crate::data::board::BoardData;
-use crate::data::device::HashAlgorithm::SHA256;
 use crate::data::device::MinerFirmware::Stock;
 use crate::data::device::MinerMake::BitAxe;
-use crate::data::device::{DeviceInfo, HashAlgorithm, MinerFirmware, MinerModel};
+use crate::data::device::{DeviceInfo, HashAlgorithm, MinerModel};
 use crate::data::hashrate::{HashRate, HashRateUnit};
 use crate::data::miner::MinerData;
-use crate::miners::api::web::ESPMinerWebAPI::{ESPMinerError, EspWebApi};
+use crate::miners::api::web::esp_web_api::EspWebApi;
 use crate::miners::backends::traits::GetMinerData;
 use crate::miners::data::{DataCollector, DataExtractor, DataField, DataLocation, get_by_key};
 use async_trait::async_trait;
 use macaddr::MacAddr;
-use measurements::{AngularVelocity, Frequency, Power, Temperature, Voltage};
-use serde::{Deserialize, Serialize};
-use serde_json::error::Category::Data;
-use std::collections::HashSet;
+use measurements::{AngularVelocity, Power};
 use std::net::IpAddr;
 use std::str::FromStr;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use strum::EnumIter;
-use strum::IntoEnumIterator;
-use tokio::time::Instant;
+use std::time::{SystemTime, UNIX_EPOCH};
 use crate::data::fan::FanData;
 
 pub struct ESPMiner {

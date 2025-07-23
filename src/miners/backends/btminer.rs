@@ -10,13 +10,12 @@ use crate::miners::api::rpc::{btminer::BTMinerV3RPC, traits::SendRPCCommand};
 use crate::miners::data::{DataField, DataLocation};
 use async_trait::async_trait;
 use macaddr::MacAddr;
-use measurements::{AngularVelocity, Data, Frequency, Power, Temperature, Voltage};
+use measurements::{AngularVelocity, Frequency, Power, Temperature, Voltage};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 use std::net::IpAddr;
 use std::str::FromStr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::sync::RwLock;
 
 pub struct BTMinerV3Backend {
     pub ip: IpAddr,
@@ -239,7 +238,7 @@ impl GetMinerData for BTMinerV3Backend {
         }
     }
 
-    fn get_locations(&self, data_field: DataField) -> &'static [DataLocation] {
+    fn get_locations(&self, _data_field: DataField) -> &'static [DataLocation] {
         todo!()
     }
 }
