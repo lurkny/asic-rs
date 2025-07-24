@@ -128,7 +128,6 @@ impl EspWebApi {
             .await
             .map_err(|_| ESPMinerError::Timeout)?
             .map_err(|e| ESPMinerError::NetworkError(e.to_string()))?;
-        println!("{:?}", response);
         Ok(response)
     }
 
