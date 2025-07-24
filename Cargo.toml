@@ -16,3 +16,4 @@ serde_json = "1.0.140"
 tokio = { version = "1.43.0", features = ["full"] }
 url = "2.5.4"
 async-trait = "0.1.88"
+strum = { version = "0.27", features = ["derive"] }

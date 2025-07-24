@@ -7,6 +7,7 @@ use crate::data::miner::MinerData;
 use crate::data::pool::{PoolData, PoolURL};
 use crate::miners::api::rpc::errors::RPCError;
 use crate::miners::api::rpc::{btminer::BTMinerV3RPC, traits::SendRPCCommand};
+use crate::miners::data::{DataField, DataLocation};
 use async_trait::async_trait;
 use macaddr::MacAddr;
 use measurements::{AngularVelocity, Frequency, Power, Temperature, Voltage};
@@ -235,6 +236,10 @@ impl GetMinerData for BTMinerV3Backend {
                 _ => Vec::new(),
             },
         }
+    }
+
+    fn get_locations(&self, _data_field: DataField) -> &'static [DataLocation] {
+        todo!()
     }
 }
 

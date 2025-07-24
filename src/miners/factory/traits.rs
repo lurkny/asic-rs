@@ -53,6 +53,7 @@ impl ModelSelection for MinerMake {
         match self {
             MinerMake::AntMiner => model::get_model_antminer(ip).await,
             MinerMake::WhatsMiner => model::get_model_whatsminer(ip).await,
+            MinerMake::BitAxe => model::get_model_bitaxe(ip).await,
             _ => None,
         }
     }

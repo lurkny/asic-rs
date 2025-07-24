@@ -1,14 +1,15 @@
 use asic_rs::get_miner;
-use asic_rs::miners::backends::traits::GetMinerData;
 use std::net::IpAddr;
 
 #[tokio::main]
 async fn main() {
-    let miner_ip = IpAddr::from([10, 0, 3, 131]);
+    let miner_ip = IpAddr::from([192, 168, 1, 199]);
 
     let miner = get_miner(miner_ip).await.unwrap();
     if miner.is_some() {
-        dbg!(miner.unwrap().get_data().await);
+        println!("{:?}", miner.unwrap().get_data().await);
+    } else {
+        println!("No miner found");
     }
 
     // let miner = BTMinerV3Backend::new(miner_ip);
