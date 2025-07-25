@@ -157,7 +157,7 @@ impl GetMinerData for ESPMiner {
 
     fn get_locations(&self, data_field: DataField) -> &'static [DataLocation] {
         const SYSTEM_INFO_CMD: &str = "system/info";
-        const ASIC_INFO_CMD: &str = "asic/info";
+        const ASIC_INFO_CMD: &str = "system/asic";
 
         match data_field {
             DataField::Mac => &[(
@@ -189,13 +189,22 @@ impl GetMinerData for ESPMiner {
                     key: Some("boardVersion"),
                 },
             )],
-            DataField::ExpectedHashboards => &[(
-                SYSTEM_INFO_CMD,
-                DataExtractor {
-                    func: get_by_key,
-                    key: Some("asicCount"),
-                },
-            )],
+            DataField::ExpectedHashboards => &[
+                (
+                    SYSTEM_INFO_CMD,
+                    DataExtractor {
+                        func: get_by_key,
+                        key: Some("asicCount"),
+                    },
+                ),
+                (
+                    ASIC_INFO_CMD,
+                    DataExtractor {
+                        func: get_by_key,
+                        key: Some("asicCount"),
+                    },
+                ),
+            ],
             DataField::Hashboards => &[(
                 ASIC_INFO_CMD,
                 DataExtractor {
@@ -210,22 +219,13 @@ impl GetMinerData for ESPMiner {
                     key: Some("hashRate"),
                 },
             )],
-            DataField::TotalChips => &[
-                (
-                    SYSTEM_INFO_CMD,
-                    DataExtractor {
-                        func: get_by_key,
-                        key: Some("smallCoreCount"),
-                    },
-                ),
-                (
-                    ASIC_INFO_CMD,
-                    DataExtractor {
-                        func: get_by_key,
-                        key: Some("smallCoreCount"),
-                    },
-                ),
-            ],
+            DataField::TotalChips => &[(
+                SYSTEM_INFO_CMD,
+                DataExtractor {
+                    func: get_by_key,
+                    key: Some("smallCoreCount"),
+                },
+            )],
             DataField::ExpectedFans => &[],
             DataField::Fans => &[(
                 SYSTEM_INFO_CMD,
