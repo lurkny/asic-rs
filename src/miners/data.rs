@@ -119,7 +119,8 @@ impl<'a> DataCollector<'a> {
 
     /// Collects **all** available fields from the miner and returns a map of results.
     pub async fn collect_all(&mut self) -> HashMap<DataField, &Value> {
-        self.collect(DataField::iter().collect::<Vec<_>>().as_slice()).await
+        self.collect(DataField::iter().collect::<Vec<_>>().as_slice())
+            .await
     }
 
     /// Collects only the specified fields from the miner and returns a map of results.
