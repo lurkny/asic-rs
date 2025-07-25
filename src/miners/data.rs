@@ -3,50 +3,84 @@ use crate::miners::backends::traits::GetMinerData;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use strum::{EnumIter, IntoEnumIterator};
+
+/// Represents the individual pieces of data that can be queried from a miner device.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Copy, EnumIter)]
 pub enum DataField {
+    /// MAC address of the miner.
     Mac,
+    /// Version of the miner's API.
     ApiVersion,
+    /// Firmware version of the miner.
     FwVersion,
+    /// Hostname assigned to the miner.
     Hostname,
+    /// Current hashrate reported by the miner.
     Hashrate,
+    /// Expected hashrate based on configuration.
     ExpectedHashrate,
+    /// Details about the hashboards (e.g., temperatures, chips, etc.).
     Hashboards,
+    /// Current power consumption in watts.
     Wattage,
+    /// Fan speed or fan configuration.
     Fans,
+    /// Uptime in seconds or another unit.
     Uptime,
+    /// Pool configuration (addresses, statuses, etc.).
     Pools,
+    /// Reported errors from the miner.
     Errors,
+    /// Status of the fault or alert light.
     FaultLight,
+    /// Whether the miner is currently hashing.
     IsMining,
 }
 
-type ExtractorFn = fn(&Value, Option<&'static str>) -> Option<Value>;
+/// A function pointer type that takes a JSON `Value` and an optional key,
+/// returning the extracted value if found.
+type ExtractorFn = for<'a> fn(&'a Value, Option<&'static str>) -> Option<&'a Value>;
 
+/// Describes how to extract a specific value from a command's response.
+///
+/// Created by a backend and used to locate a field within a JSON structure.
 #[derive(Clone, Copy)]
 pub struct DataExtractor {
+    /// Function used to extract data from a JSON response.
     pub func: ExtractorFn,
+    /// Optional key or pointer within the response to extract.
     pub key: Option<&'static str>,
 }
 
+/// Alias for a tuple describing the API command and the extractor used to parse its result.
 pub type DataLocation = (&'static str, DataExtractor);
 
-pub fn get_by_key(data: &Value, key: Option<&str>) -> Option<Value> {
-    data.get(key?.to_string()).cloned()
+/// Extracts a value from a JSON object using a key (flat lookup).
+///
+/// Returns `None` if the key is `None` or not found in the object.
+pub fn get_by_key<'a>(data: &'a Value, key: Option<&str>) -> Option<&'a Value> {
+    data.get(key?.to_string())
 }
 
-
-pub fn get_by_pointer(data: &Value, pointer: Option<&str>) -> Option<Value> {
-    data.pointer(pointer?).cloned()
+/// Extracts a value from a JSON object using a JSON pointer path.
+///
+/// Returns `None` if the pointer is `None` or the path doesn't exist.
+pub fn get_by_pointer<'a>(data: &'a Value, pointer: Option<&str>) -> Option<&'a Value> {
+    data.pointer(pointer?)
 }
 
+/// A utility for collecting structured miner data from an API backend.
 pub struct DataCollector<'a> {
+    /// Backend-specific data mapping logic.
     miner: &'a dyn GetMinerData,
+    /// API client used to send commands to the miner.
     api_client: &'a dyn ApiClient,
+    /// Cache of command responses keyed by command string.
     cache: HashMap<String, Value>,
 }
 
 impl<'a> DataCollector<'a> {
+    /// Constructs a new `DataCollector` with the given backend and API client.
     pub fn new(miner: &'a dyn GetMinerData, api_client: &'a dyn ApiClient) -> Self {
         Self {
             miner,
@@ -55,10 +89,15 @@ impl<'a> DataCollector<'a> {
         }
     }
 
-    pub async fn collect_all(&mut self) -> HashMap<DataField, Value> {
+    /// Collects **all** available fields from the miner and returns a map of results.
+    pub async fn collect_all(&mut self) -> HashMap<DataField, &Value> {
         self.collect(DataField::iter().collect::<Vec<_>>().as_slice()).await
     }
-    pub async fn collect(&mut self, fields: &[DataField]) -> HashMap<DataField, Value> {
+
+    /// Collects only the specified fields from the miner and returns a map of results.
+    ///
+    /// This method sends only the minimum required set of API commands.
+    pub async fn collect(&mut self, fields: &[DataField]) -> HashMap<DataField, &Value> {
         let mut results = HashMap::new();
         let required_commands = self.get_required_commands(fields);
 
@@ -78,7 +117,9 @@ impl<'a> DataCollector<'a> {
         results
     }
 
-    // Determines the unique set of API commands needed for the requested fields.
+    /// Determines the unique set of API commands needed for the requested fields.
+    ///
+    /// Uses the backend's location mappings to identify required commands.
     fn get_required_commands(&self, fields: &[DataField]) -> HashSet<&'static str> {
         fields
             .iter()
@@ -87,8 +128,10 @@ impl<'a> DataCollector<'a> {
             .collect()
     }
 
-    // Tries available locations to extract a single data field.
-    fn extract_field(&self, field: DataField) -> Option<Value> {
+    /// Attempts to extract the value for a specific field from the cached command responses.
+    ///
+    /// Uses the extractor function and key associated with the field for parsing.
+    fn extract_field(&self, field: DataField) -> Option<&Value> {
         for (command, extractor) in self.miner.get_locations(field) {
             if let Some(response_data) = self.cache.get(*command) {
                 if let Some(value) = (extractor.func)(response_data, extractor.key) {
