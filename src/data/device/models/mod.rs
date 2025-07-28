@@ -1,5 +1,5 @@
 use super::{MinerFirmware, MinerMake};
-use crate::data::device::models::bitaxe::BitaxeModel;
+use bitaxe::BitaxeModel;
 use antminer::AntMinerModel;
 use braiins::BraiinsModel;
 use serde::Serialize;
