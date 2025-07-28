@@ -7,34 +7,62 @@ use strum::{EnumIter, IntoEnumIterator};
 /// Represents the individual pieces of data that can be queried from a miner device.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Copy, EnumIter)]
 pub enum DataField {
+    /// Schema version of the miner data.
+    SchemaVersion,
+    /// Timestamp of when the data was collected.
+    Timestamp,
+    /// IP address of the miner.
+    Ip,
     /// MAC address of the miner.
     Mac,
+    /// Information about the miner's device.
+    DeviceInfo,
+    /// Serial number of the miner.
+    SerialNumber,
+    /// Hostname assigned to the miner.
+    Hostname,
     /// Version of the miner's API.
     ApiVersion,
     /// Firmware version of the miner.
-    FwVersion,
-    /// Hostname assigned to the miner.
-    Hostname,
-    /// Current hashrate reported by the miner.
-    Hashrate,
-    /// Expected hashrate based on configuration.
-    ExpectedHashrate,
+    FirmwareVersion,
+    /// Control board version of the miner.
+    ControlBoardVersion,
+    /// Expected number of hashboards.
+    ExpectedHashboards,
     /// Details about the hashboards (e.g., temperatures, chips, etc.).
     Hashboards,
-    /// Current power consumption in watts.
-    Wattage,
+    /// Current hashrate reported by the miner.
+    Hashrate,
+    /// Expected number of chips across all hashboards.
+    ExpectedChips,
+    /// Total number of chips detected.
+    TotalChips,
+    /// Expected number of fans.
+    ExpectedFans,
     /// Fan speed or fan configuration.
     Fans,
-    /// Uptime in seconds or another unit.
+    /// PSU fan speed or configuration.
+    PsuFans,
+    /// Average temperature reported by the miner.
+    AverageTemperature,
+    /// Fluid temperature reported by the miner.
+    FluidTemperature,
+    /// Current power consumption in watts.
+    Wattage,
+    /// Configured power limit in watts.
+    WattageLimit,
+    /// Efficiency of the miner (e.g., J/TH).
+    Efficiency,
+    /// Whether the fault or alert light is flashing.
+    LightFlashing,
+    /// Messages reported by the miner (e.g., errors or warnings).
+    Messages,
+    /// Uptime in seconds.
     Uptime,
-    /// Pool configuration (addresses, statuses, etc.).
-    Pools,
-    /// Reported errors from the miner.
-    Errors,
-    /// Status of the fault or alert light.
-    FaultLight,
     /// Whether the miner is currently hashing.
     IsMining,
+    /// Pool configuration (addresses, statuses, etc.).
+    Pools,
 }
 
 /// A function pointer type that takes a JSON `Value` and an optional key,
@@ -69,6 +97,153 @@ pub fn get_by_pointer<'a>(data: &'a Value, pointer: Option<&str>) -> Option<&'a 
     data.pointer(pointer?)
 }
 
+/// A trait for types that can be extracted from a JSON Value.
+pub trait FromValue: Sized {
+    /// Attempts to convert a JSON Value to Self.
+    fn from_value(value: &Value) -> Option<Self>;
+}
+
+// Implement FromValue for common types
+impl FromValue for String {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.as_str().map(String::from)
+    }
+}
+
+impl FromValue for f64 {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.as_f64()
+    }
+}
+
+impl FromValue for u64 {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.as_u64()
+    }
+}
+
+impl FromValue for i64 {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.as_i64()
+    }
+}
+
+impl FromValue for bool {
+    fn from_value(value: &Value) -> Option<Self> {
+        // Try to get as bool first
+        value.as_bool().or_else(|| {
+            // If not a bool, try to interpret as a number (0 = false, non-zero = true)
+            value
+                .as_u64()
+                .map(|n| n != 0)
+                .or_else(|| value.as_i64().map(|n| n != 0))
+        })
+    }
+}
+
+impl<T: FromValue> FromValue for Vec<T> {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.as_array()?.iter().map(|v| T::from_value(v)).collect()
+    }
+}
+
+/// Extension trait for HashMap<DataField, &Value> to provide cleaner value extraction.
+pub trait DataExtensions {
+    /// Extract a value of type T from the data map for the given field.
+    fn extract<T: FromValue>(&self, field: DataField) -> Option<T>;
+
+    /// Extract a value of type T from the data map for the given field, with a default value.
+    fn extract_or<T: FromValue>(&self, field: DataField, default: T) -> T;
+
+    /// Extract a nested value of type T from the data map for the given field and nested key.
+    fn extract_nested<T: FromValue>(&self, field: DataField, nested_key: &str) -> Option<T>;
+
+    /// Extract a nested value of type T from the data map for the given field and nested key, with a default value.
+    fn extract_nested_or<T: FromValue>(&self, field: DataField, nested_key: &str, default: T) -> T;
+
+    /// Extract a value and map it to another type using the provided function.
+    fn extract_map<T: FromValue, U>(&self, field: DataField, f: impl FnOnce(T) -> U) -> Option<U>;
+
+    /// Extract a value, map it to another type, or use a default value.
+    fn extract_map_or<T: FromValue, U>(
+        &self,
+        field: DataField,
+        default: U,
+        f: impl FnOnce(T) -> U,
+    ) -> U;
+
+    /// Extract a nested value and map it to another type using the provided function.
+    fn extract_nested_map<T: FromValue, U>(
+        &self,
+        field: DataField,
+        nested_key: &str,
+        f: impl FnOnce(T) -> U,
+    ) -> Option<U>;
+
+    /// Extract a nested value, map it to another type, or use a default value.
+    fn extract_nested_map_or<T: FromValue, U>(
+        &self,
+        field: DataField,
+        nested_key: &str,
+        default: U,
+        f: impl FnOnce(T) -> U,
+    ) -> U;
+}
+
+impl<'a> DataExtensions for HashMap<DataField, &'a Value> {
+    fn extract<T: FromValue>(&self, field: DataField) -> Option<T> {
+        self.get(&field).and_then(|v| T::from_value(v))
+    }
+
+    fn extract_or<T: FromValue>(&self, field: DataField, default: T) -> T {
+        self.extract(field).unwrap_or(default)
+    }
+
+    fn extract_nested<T: FromValue>(&self, field: DataField, nested_key: &str) -> Option<T> {
+        self.get(&field)
+            .and_then(|v| v.get(nested_key))
+            .and_then(|v| T::from_value(v))
+    }
+
+    fn extract_nested_or<T: FromValue>(&self, field: DataField, nested_key: &str, default: T) -> T {
+        self.extract_nested(field, nested_key).unwrap_or(default)
+    }
+
+    fn extract_map<T: FromValue, U>(&self, field: DataField, f: impl FnOnce(T) -> U) -> Option<U> {
+        self.extract(field).map(f)
+    }
+
+    fn extract_map_or<T: FromValue, U>(
+        &self,
+        field: DataField,
+        default: U,
+        f: impl FnOnce(T) -> U,
+    ) -> U {
+        self.extract(field).map(f).unwrap_or(default)
+    }
+
+    fn extract_nested_map<T: FromValue, U>(
+        &self,
+        field: DataField,
+        nested_key: &str,
+        f: impl FnOnce(T) -> U,
+    ) -> Option<U> {
+        self.extract_nested(field, nested_key).map(f)
+    }
+
+    fn extract_nested_map_or<T: FromValue, U>(
+        &self,
+        field: DataField,
+        nested_key: &str,
+        default: U,
+        f: impl FnOnce(T) -> U,
+    ) -> U {
+        self.extract_nested(field, nested_key)
+            .map(f)
+            .unwrap_or(default)
+    }
+}
+
 /// A utility for collecting structured miner data from an API backend.
 pub struct DataCollector<'a> {
     /// Backend-specific data mapping logic.
@@ -91,7 +266,8 @@ impl<'a> DataCollector<'a> {
 
     /// Collects **all** available fields from the miner and returns a map of results.
     pub async fn collect_all(&mut self) -> HashMap<DataField, &Value> {
-        self.collect(DataField::iter().collect::<Vec<_>>().as_slice()).await
+        self.collect(DataField::iter().collect::<Vec<_>>().as_slice())
+            .await
     }
 
     /// Collects only the specified fields from the miner and returns a map of results.

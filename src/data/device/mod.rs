@@ -78,7 +78,7 @@ impl DeviceInfo {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct MinerHardware {
     pub chips: Option<u16>,
     pub fans: Option<u8>,
