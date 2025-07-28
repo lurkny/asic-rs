@@ -11,6 +11,7 @@ use crate::data::device::MinerMake::BitAxe;
 use crate::data::device::{DeviceInfo, HashAlgorithm, MinerFirmware, MinerHardware, MinerModel};
 use crate::data::fan::FanData;
 use crate::data::hashrate::{HashRate, HashRateUnit};
+use crate::data::message::{MessageSeverity, MinerMessage};
 use crate::data::miner::MinerData;
 use crate::data::pool::{PoolData, PoolScheme, PoolURL};
 use crate::miners::api::web::esp_web_api::EspWebApi;
@@ -224,6 +225,21 @@ impl GetMinerData for ESPMiner {
             vec![main_pool_data, fallback_pool_data]
         };
 
+        let mut messages = Vec::new();
+
+        let is_overheating = data.extract_nested::<bool>(DataField::Hashboards, "overheat_mode");
+
+        if let Some(true) = is_overheating {
+            messages.push(MinerMessage {
+                timestamp: timestamp as u32,
+                code: 0u64,
+                message: "Overheat Mode is Enabled!".to_string(),
+                severity: MessageSeverity::Warning,
+            });
+        }
+
+
+
         MinerData {
             // Version information
             schema_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -266,7 +282,7 @@ impl GetMinerData for ESPMiner {
 
             // Status information
             light_flashing: None,
-            messages: vec![],
+            messages,
             uptime,
             is_mining,
 
