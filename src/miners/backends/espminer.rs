@@ -167,7 +167,6 @@ impl GetMinerData for ESPMiner {
         };
 
         let pools = {
-            // Extract pool data with default values where needed
             let main_url =
                 data.extract_nested_or::<String>(DataField::Pools, "stratumUrl", String::new());
             let main_port = data.extract_nested_or::<u64>(DataField::Pools, "stratumPort", 0);
@@ -175,7 +174,6 @@ impl GetMinerData for ESPMiner {
             let rejected_share = data.extract_nested::<u64>(DataField::Pools, "sharesRejected");
             let main_user = data.extract_nested::<String>(DataField::Pools, "stratumUser");
 
-            // Extract boolean value with enhanced FromValue implementation
             let is_using_fallback =
                 data.extract_nested_or::<bool>(DataField::Pools, "isUsingFallbackStratum", false);
 
