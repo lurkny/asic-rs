@@ -1,5 +1,5 @@
 use super::{MinerFirmware, MinerMake};
-pub(crate) use crate::data::device::models::bitaxe::BitaxeModel;
+use crate::data::device::models::bitaxe::BitaxeModel;
 use antminer::AntMinerModel;
 use braiins::BraiinsModel;
 use serde::Serialize;
@@ -7,7 +7,7 @@ use std::{fmt::Display, str::FromStr};
 use whatsminer::WhatsMinerModel;
 
 pub mod antminer;
-mod bitaxe;
+pub mod bitaxe;
 pub mod braiins;
 pub mod whatsminer;
 

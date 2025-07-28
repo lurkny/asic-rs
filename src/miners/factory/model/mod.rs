@@ -1,5 +1,5 @@
-use crate::data::device::models::BitaxeModel::*;
 use crate::data::device::models::MinerModelFactory;
+use crate::data::device::models::bitaxe::BitaxeModel::*;
 use crate::data::device::{MinerFirmware, MinerMake, MinerModel};
 use crate::miners::factory::model::whatsminer::{get_model_whatsminer_v2, get_model_whatsminer_v3};
 use crate::miners::util;

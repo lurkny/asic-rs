@@ -1,6 +1,6 @@
 use crate::data::device::MinerHardware;
-use crate::data::device::models::BitaxeModel;
 use crate::data::device::models::antminer::AntMinerModel;
+use crate::data::device::models::bitaxe::BitaxeModel;
 use crate::data::device::models::braiins::BraiinsModel;
 use crate::data::device::models::whatsminer::WhatsMinerModel;
 

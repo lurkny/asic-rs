@@ -97,6 +97,153 @@ pub fn get_by_pointer<'a>(data: &'a Value, pointer: Option<&str>) -> Option<&'a 
     data.pointer(pointer?)
 }
 
+/// A trait for types that can be extracted from a JSON Value.
+pub trait FromValue: Sized {
+    /// Attempts to convert a JSON Value to Self.
+    fn from_value(value: &Value) -> Option<Self>;
+}
+
+// Implement FromValue for common types
+impl FromValue for String {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.as_str().map(String::from)
+    }
+}
+
+impl FromValue for f64 {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.as_f64()
+    }
+}
+
+impl FromValue for u64 {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.as_u64()
+    }
+}
+
+impl FromValue for i64 {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.as_i64()
+    }
+}
+
+impl FromValue for bool {
+    fn from_value(value: &Value) -> Option<Self> {
+        // Try to get as bool first
+        value.as_bool().or_else(|| {
+            // If not a bool, try to interpret as a number (0 = false, non-zero = true)
+            value
+                .as_u64()
+                .map(|n| n != 0)
+                .or_else(|| value.as_i64().map(|n| n != 0))
+        })
+    }
+}
+
+impl<T: FromValue> FromValue for Vec<T> {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.as_array()?.iter().map(|v| T::from_value(v)).collect()
+    }
+}
+
+/// Extension trait for HashMap<DataField, &Value> to provide cleaner value extraction.
+pub trait DataExtensions {
+    /// Extract a value of type T from the data map for the given field.
+    fn extract<T: FromValue>(&self, field: DataField) -> Option<T>;
+
+    /// Extract a value of type T from the data map for the given field, with a default value.
+    fn extract_or<T: FromValue>(&self, field: DataField, default: T) -> T;
+
+    /// Extract a nested value of type T from the data map for the given field and nested key.
+    fn extract_nested<T: FromValue>(&self, field: DataField, nested_key: &str) -> Option<T>;
+
+    /// Extract a nested value of type T from the data map for the given field and nested key, with a default value.
+    fn extract_nested_or<T: FromValue>(&self, field: DataField, nested_key: &str, default: T) -> T;
+
+    /// Extract a value and map it to another type using the provided function.
+    fn extract_map<T: FromValue, U>(&self, field: DataField, f: impl FnOnce(T) -> U) -> Option<U>;
+
+    /// Extract a value, map it to another type, or use a default value.
+    fn extract_map_or<T: FromValue, U>(
+        &self,
+        field: DataField,
+        default: U,
+        f: impl FnOnce(T) -> U,
+    ) -> U;
+
+    /// Extract a nested value and map it to another type using the provided function.
+    fn extract_nested_map<T: FromValue, U>(
+        &self,
+        field: DataField,
+        nested_key: &str,
+        f: impl FnOnce(T) -> U,
+    ) -> Option<U>;
+
+    /// Extract a nested value, map it to another type, or use a default value.
+    fn extract_nested_map_or<T: FromValue, U>(
+        &self,
+        field: DataField,
+        nested_key: &str,
+        default: U,
+        f: impl FnOnce(T) -> U,
+    ) -> U;
+}
+
+impl<'a> DataExtensions for HashMap<DataField, &'a Value> {
+    fn extract<T: FromValue>(&self, field: DataField) -> Option<T> {
+        self.get(&field).and_then(|v| T::from_value(v))
+    }
+
+    fn extract_or<T: FromValue>(&self, field: DataField, default: T) -> T {
+        self.extract(field).unwrap_or(default)
+    }
+
+    fn extract_nested<T: FromValue>(&self, field: DataField, nested_key: &str) -> Option<T> {
+        self.get(&field)
+            .and_then(|v| v.get(nested_key))
+            .and_then(|v| T::from_value(v))
+    }
+
+    fn extract_nested_or<T: FromValue>(&self, field: DataField, nested_key: &str, default: T) -> T {
+        self.extract_nested(field, nested_key).unwrap_or(default)
+    }
+
+    fn extract_map<T: FromValue, U>(&self, field: DataField, f: impl FnOnce(T) -> U) -> Option<U> {
+        self.extract(field).map(f)
+    }
+
+    fn extract_map_or<T: FromValue, U>(
+        &self,
+        field: DataField,
+        default: U,
+        f: impl FnOnce(T) -> U,
+    ) -> U {
+        self.extract(field).map(f).unwrap_or(default)
+    }
+
+    fn extract_nested_map<T: FromValue, U>(
+        &self,
+        field: DataField,
+        nested_key: &str,
+        f: impl FnOnce(T) -> U,
+    ) -> Option<U> {
+        self.extract_nested(field, nested_key).map(f)
+    }
+
+    fn extract_nested_map_or<T: FromValue, U>(
+        &self,
+        field: DataField,
+        nested_key: &str,
+        default: U,
+        f: impl FnOnce(T) -> U,
+    ) -> U {
+        self.extract_nested(field, nested_key)
+            .map(f)
+            .unwrap_or(default)
+    }
+}
+
 /// A utility for collecting structured miner data from an API backend.
 pub struct DataCollector<'a> {
     /// Backend-specific data mapping logic.

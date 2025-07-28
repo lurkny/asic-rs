@@ -17,12 +17,14 @@ use crate::data::pool::{PoolData, PoolScheme, PoolURL};
 use crate::miners::api::web::esp_web_api::EspWebApi;
 use crate::miners::backends::traits::GetMinerData;
 use crate::miners::data::{
-    DataCollector, DataExtractor, DataField, DataLocation, get_by_key, get_by_pointer,
+    DataCollector, DataExtensions, DataExtractor, DataField, DataLocation, get_by_key,
+    get_by_pointer,
 };
 
 pub struct ESPMiner {
     model: MinerModel,
     web: EspWebApi,
+    ip: IpAddr,
 }
 
 impl ESPMiner {
@@ -30,6 +32,7 @@ impl ESPMiner {
         ESPMiner {
             model,
             web: EspWebApi::new(ip.to_string(), 80),
+            ip,
         }
     }
 }
@@ -40,61 +43,34 @@ impl GetMinerData for ESPMiner {
         let mut collector = DataCollector::new(self, &self.web);
         let data = collector.collect_all().await;
 
+        // Extract basic string fields
         let mac = data
-            .get(&DataField::Mac)
-            .and_then(|v| v.as_str())
-            .and_then(|s| MacAddr::from_str(s).ok());
+            .extract::<String>(DataField::Mac)
+            .and_then(|s| MacAddr::from_str(&s).ok());
 
-        let hostname = data
-            .get(&DataField::Hostname)
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-
-        let api_version = data
-            .get(&DataField::ApiVersion)
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-
-        let firmware_version = data
-            .get(&DataField::FirmwareVersion)
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-
-        let control_board_version = data
-            .get(&DataField::ControlBoardVersion)
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+        let hostname = data.extract::<String>(DataField::Hostname);
+        let api_version = data.extract::<String>(DataField::ApiVersion);
+        let firmware_version = data.extract::<String>(DataField::FirmwareVersion);
+        let control_board_version = data.extract::<String>(DataField::ControlBoardVersion);
 
         // Extract hashrate and convert to HashRate structure
-        let hashrate = data
-            .get(&DataField::Hashrate)
-            .and_then(|v| v.as_f64())
-            .map(|f| HashRate {
-                value: f,
-                unit: HashRateUnit::GigaHash,
-                algo: String::from("SHA256"),
-            });
+        let hashrate = data.extract_map::<f64, _>(DataField::Hashrate, |f| HashRate {
+            value: f,
+            unit: HashRateUnit::GigaHash,
+            algo: String::from("SHA256"),
+        });
 
-        let total_chips = data
-            .get(&DataField::TotalChips)
-            .and_then(|v| v.as_u64())
-            .map(|u| u as u16);
-
-        let wattage = data
-            .get(&DataField::Wattage)
-            .and_then(|v| v.as_f64())
-            .map(Power::from_watts);
-
-        let average_temperature = data
-            .get(&DataField::AverageTemperature)
-            .and_then(|v| v.as_f64())
-            .map(Temperature::from_celsius);
+        // Extract numeric values with conversions
+        let total_chips = data.extract_map::<u64, _>(DataField::TotalChips, |u| u as u16);
+        let wattage = data.extract_map::<f64, _>(DataField::Wattage, Power::from_watts);
+        let average_temperature =
+            data.extract_map::<f64, _>(DataField::AverageTemperature, Temperature::from_celsius);
 
         let efficiency = match (hashrate.as_ref(), wattage.as_ref()) {
             (Some(hr), Some(w)) => {
                 let hashrate_th = hr.value / 1000.0;
                 Some(w.as_watts() / hashrate_th)
-            },
+            }
             _ => None,
         };
 
@@ -103,21 +79,16 @@ impl GetMinerData for ESPMiner {
             .expect("Failed to get system time")
             .as_secs();
 
-        let fans = data
-            .get(&DataField::Fans)
-            .and_then(|v| v.as_f64())
-            .map(|f| {
-                vec![FanData {
-                    position: 0,
-                    rpm: AngularVelocity::from_rpm(f),
-                }]
-            })
-            .unwrap_or_default();
+        // Extract fan data with the default value if missing
+        let fans = data.extract_map_or::<f64, _>(DataField::Fans, Vec::new(), |f| {
+            vec![FanData {
+                position: 0,
+                rpm: AngularVelocity::from_rpm(f),
+            }]
+        });
 
-        let uptime = data
-            .get(&DataField::Uptime)
-            .and_then(|v| v.as_u64())
-            .map(Duration::from_secs);
+        // Extract uptime
+        let uptime = data.extract_map::<u64, _>(DataField::Uptime, Duration::from_secs);
 
         // Determine if the miner is actively mining based on hashrate
         let is_mining = hashrate.as_ref().map_or(false, |hr| hr.value > 0.0);
@@ -126,30 +97,41 @@ impl GetMinerData for ESPMiner {
         let miner_hardware = MinerHardware::from(&self.model);
 
         let hashboards = {
-            let board_voltage = data.get(&DataField::Hashboards).and_then(|hashboard_data| {
-                hashboard_data.get("voltage")
-                    .and_then(|voltage_value| voltage_value.as_f64())
-                    .map(Voltage::from_millivolts)
+            // Extract nested values with type conversion
+            let board_voltage = data.extract_nested_map::<f64, _>(
+                DataField::Hashboards,
+                "voltage",
+                Voltage::from_millivolts,
+            );
+
+            let board_temperature = data.extract_nested_map::<f64, _>(
+                DataField::Hashboards,
+                "vrTemp",
+                Temperature::from_celsius,
+            );
+
+            let board_frequency = data.extract_nested_map::<f64, _>(
+                DataField::Hashboards,
+                "frequency",
+                Frequency::from_megahertz,
+            );
+
+            let chip_temperature = data.extract_nested_map::<f64, _>(
+                DataField::Hashboards,
+                "temp",
+                Temperature::from_celsius,
+            );
+
+            let expected_hashrate = Some(HashRate {
+                value: data.extract_nested_or::<f64>(
+                    DataField::Hashboards,
+                    "expectedHashrate",
+                    0.0,
+                ),
+                unit: HashRateUnit::GigaHash,
+                algo: "SHA256".to_string(),
             });
-            
-            let board_temperature = data
-                .get(&DataField::Hashboards)
-                .and_then(|hashboard_data| hashboard_data.get("vrTemp"))
-                .and_then(|temp_value| temp_value.as_f64())
-                .map(Temperature::from_celsius);
-                
-            let board_frequency = data
-                .get(&DataField::Hashboards)
-                .and_then(|hashboard_data| hashboard_data.get("frequency"))
-                .and_then(|freq_value| freq_value.as_f64())
-                .map(Frequency::from_megahertz);
-                
-            let chip_temperature = data
-                .get(&DataField::Hashboards)
-                .and_then(|hashboard_data| hashboard_data.get("temp"))
-                .and_then(|temp_value| temp_value.as_f64())
-                .map(Temperature::from_celsius);
-                
+
             let board_hashrate = hashrate.clone();
 
             let chip_info = ChipData {
@@ -165,10 +147,10 @@ impl GetMinerData for ESPMiner {
             let board_data = BoardData {
                 position: 0,
                 hashrate: board_hashrate,
-                expected_hashrate: None,
+                expected_hashrate,
                 board_temperature,
-                intake_temperature: None,
-                outlet_temperature: None,
+                intake_temperature: board_temperature,
+                outlet_temperature: board_temperature,
                 expected_chips: miner_hardware.chips,
                 working_chips: total_chips,
                 serial_number: None,
@@ -178,23 +160,22 @@ impl GetMinerData for ESPMiner {
                 tuned: None,
                 active: Some(true),
             };
-            
+
             vec![board_data]
         };
 
         let pools = {
+            // Extract pool data with default values where needed
+            let main_url =
+                data.extract_nested_or::<String>(DataField::Pools, "stratumUrl", String::new());
+            let main_port = data.extract_nested_or::<u64>(DataField::Pools, "stratumPort", 0);
+            let accepted_share = data.extract_nested::<u64>(DataField::Pools, "sharesAccepted");
+            let rejected_share = data.extract_nested::<u64>(DataField::Pools, "sharesRejected");
+            let main_user = data.extract_nested::<String>(DataField::Pools, "stratumUser");
 
-            let main_url = data.get(&DataField::Pools).and_then(|r| r.get("stratumUrl")).and_then(|s| s.as_str()).unwrap_or("").to_string();
-            let main_port = data.get(&DataField::Pools).and_then(|r| r.get("stratumPort")).and_then(|s| s.as_u64()).unwrap_or(0);
-            let accepted_share = data.get(&DataField::Pools).and_then(|r| r.get("sharesAccepted")).and_then(|s| s.as_u64());
-            let rejected_share = data.get(&DataField::Pools).and_then(|r| r.get("sharesRejected")).and_then(|s| s.as_u64());
-            let is_using_fallback = data.get(&DataField::Pools)
-                .and_then(|r| r.get("isUsingFallbackStratum"))
-                .and_then(|s| {
-                    s.as_bool().or_else(|| {
-                        s.as_u64().map(|n| n != 0)
-                    })
-                }).unwrap_or(false);
+            // Extract boolean value with enhanced FromValue implementation
+            let is_using_fallback =
+                data.extract_nested_or::<bool>(DataField::Pools, "isUsingFallbackStratum", false);
 
             let main_pool_url = PoolURL {
                 scheme: PoolScheme::StratumV1,
@@ -202,6 +183,7 @@ impl GetMinerData for ESPMiner {
                 port: main_port as u16,
                 pubkey: None,
             };
+
             let main_pool_data = PoolData {
                 position: Some(0),
                 url: Some(main_pool_url),
@@ -209,18 +191,25 @@ impl GetMinerData for ESPMiner {
                 rejected_shares: rejected_share,
                 active: Some(!is_using_fallback),
                 alive: None,
-                user: None,
+                user: main_user,
             };
 
-            let fallback_url = data.get(&DataField::Pools).and_then(|r| r.get("fallbackStratumURL")).and_then(|s| s.as_str()).unwrap_or("").to_string();
-            let fallback_port  = data.get(&DataField::Pools).and_then(|r| r.get("fallbackStratumPort")).and_then(|s| s.as_u64()).unwrap_or(0);
-
+            // Extract fallback pool data
+            let fallback_url = data.extract_nested_or::<String>(
+                DataField::Pools,
+                "fallbackStratumURL",
+                String::new(),
+            );
+            let fallback_port =
+                data.extract_nested_or::<u64>(DataField::Pools, "fallbackStratumPort", 0);
+            let fallback_user = data.extract_nested(DataField::Pools, "fallbackStratumUser");
             let fallback_pool_url = PoolURL {
                 scheme: PoolScheme::StratumV1,
                 host: fallback_url,
                 port: fallback_port as u16,
                 pubkey: None,
             };
+
             let fallback_pool_data = PoolData {
                 position: Some(1),
                 url: Some(fallback_pool_url),
@@ -228,7 +217,7 @@ impl GetMinerData for ESPMiner {
                 rejected_shares: rejected_share,
                 active: Some(is_using_fallback),
                 alive: None,
-                user: None,
+                user: fallback_user,
             };
 
             vec![main_pool_data, fallback_pool_data]
@@ -238,48 +227,48 @@ impl GetMinerData for ESPMiner {
             // Version information
             schema_version: env!("CARGO_PKG_VERSION").to_string(),
             timestamp,
-            
+
             // Network identification
-            ip: self.web.ip.clone().parse().unwrap(),
+            ip: self.ip,
             mac,
-            
+
             // Device identification
             device_info: DeviceInfo::new(BitAxe, self.model.clone(), Stock, HashAlgorithm::SHA256),
             serial_number: None,
             hostname,
-            
+
             // Version information
             api_version,
             firmware_version,
             control_board_version,
-            
+
             // Hashboard information
             expected_hashboards: miner_hardware.boards,
             hashboards,
             hashrate,
-            
+
             // Chip information
             expected_chips: miner_hardware.chips,
             total_chips,
-            
+
             // Cooling information
             expected_fans: miner_hardware.fans,
             fans,
             psu_fans: vec![],
             average_temperature,
             fluid_temperature: None,
-            
+
             // Power information
             wattage,
             wattage_limit: None,
             efficiency,
-            
+
             // Status information
             light_flashing: None,
             messages: vec![],
             uptime,
             is_mining,
-            
+
             pools,
         }
     }
@@ -381,7 +370,7 @@ impl GetMinerData for ESPMiner {
                     func: get_by_pointer,
                     key: Some(""),
                 },
-                )],
+            )],
             _ => &[],
         }
     }
