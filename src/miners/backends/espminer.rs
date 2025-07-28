@@ -158,7 +158,7 @@ impl GetMinerData for ESPMiner {
                 chips: vec![chip_info],
                 voltage: board_voltage,
                 frequency: board_frequency,
-                tuned: None,
+                tuned: Some(true),
                 active: Some(true),
             };
 
