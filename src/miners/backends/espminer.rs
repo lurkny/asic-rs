@@ -7,9 +7,8 @@ use macaddr::MacAddr;
 use measurements::{AngularVelocity, Frequency, Power, Temperature, Voltage};
 
 use crate::data::board::{BoardData, ChipData};
-use crate::data::device::MinerFirmware::Stock;
 use crate::data::device::MinerMake::BitAxe;
-use crate::data::device::{DeviceInfo, HashAlgorithm, MinerHardware, MinerModel};
+use crate::data::device::{DeviceInfo, HashAlgorithm, MinerFirmware, MinerHardware, MinerModel};
 use crate::data::fan::FanData;
 use crate::data::hashrate::{HashRate, HashRateUnit};
 use crate::data::miner::MinerData;
@@ -25,14 +24,16 @@ pub struct ESPMiner {
     model: MinerModel,
     web: EspWebApi,
     ip: IpAddr,
+    firmware: MinerFirmware,
 }
 
 impl ESPMiner {
-    pub fn new(ip: IpAddr, model: MinerModel) -> Self {
+    pub fn new(ip: IpAddr, model: MinerModel, miner_firmware: MinerFirmware) -> Self {
         ESPMiner {
             model,
             web: EspWebApi::new(ip.to_string(), 80),
             ip,
+            firmware: miner_firmware,
         }
     }
 }
@@ -233,7 +234,7 @@ impl GetMinerData for ESPMiner {
             mac,
 
             // Device identification
-            device_info: DeviceInfo::new(BitAxe, self.model.clone(), Stock, HashAlgorithm::SHA256),
+            device_info: DeviceInfo::new(BitAxe, self.model.clone(), self.firmware, HashAlgorithm::SHA256),
             serial_number: None,
             hostname,
 
