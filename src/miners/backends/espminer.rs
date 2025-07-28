@@ -238,8 +238,6 @@ impl GetMinerData for ESPMiner {
             });
         }
 
-
-
         MinerData {
             // Version information
             schema_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -250,7 +248,12 @@ impl GetMinerData for ESPMiner {
             mac,
 
             // Device identification
-            device_info: DeviceInfo::new(BitAxe, self.model.clone(), self.firmware, HashAlgorithm::SHA256),
+            device_info: DeviceInfo::new(
+                BitAxe,
+                self.model.clone(),
+                self.firmware,
+                HashAlgorithm::SHA256,
+            ),
             serial_number: None,
             hostname,
 
