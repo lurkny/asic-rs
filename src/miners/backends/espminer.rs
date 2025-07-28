@@ -1,23 +1,23 @@
-use crate::data::board::BoardData;
+use std::net::IpAddr;
+use std::str::FromStr;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use async_trait::async_trait;
+use macaddr::MacAddr;
+use measurements::{AngularVelocity, Frequency, Power, Temperature, Voltage};
+
+use crate::data::board::{BoardData, ChipData};
 use crate::data::device::MinerFirmware::Stock;
 use crate::data::device::MinerMake::BitAxe;
-use crate::data::device::{DeviceInfo, HashAlgorithm, MinerModel};
+use crate::data::device::{DeviceInfo, HashAlgorithm, MinerHardware, MinerModel};
 use crate::data::fan::FanData;
 use crate::data::hashrate::{HashRate, HashRateUnit};
 use crate::data::miner::MinerData;
-use crate::data::pool::PoolData;
 use crate::miners::api::web::esp_web_api::EspWebApi;
 use crate::miners::backends::traits::GetMinerData;
 use crate::miners::data::{
     DataCollector, DataExtractor, DataField, DataLocation, get_by_key, get_by_pointer,
 };
-use async_trait::async_trait;
-use macaddr::MacAddr;
-use measurements::{AngularVelocity, Frequency, Power, Temperature, Voltage};
-use serde_json::error::Category::Data;
-use std::net::IpAddr;
-use std::str::FromStr;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub struct ESPMiner {
     model: MinerModel,
@@ -64,11 +64,7 @@ impl GetMinerData for ESPMiner {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        let expected_hashboards = data
-            .get(&DataField::ExpectedHashboards)
-            .and_then(|v| v.as_u64())
-            .map(|u| u as u8);
-
+        // Extract hashrate and convert to HashRate structure
         let hashrate = data
             .get(&DataField::Hashrate)
             .and_then(|v| v.as_f64())
@@ -78,11 +74,6 @@ impl GetMinerData for ESPMiner {
                 algo: String::from("SHA256"),
             });
 
-        let expected_chips = data
-            .get(&DataField::ExpectedChips)
-            .and_then(|v| v.as_u64())
-            .map(|u| u as u16);
-
         let total_chips = data
             .get(&DataField::TotalChips)
             .and_then(|v| v.as_u64())
@@ -91,25 +82,21 @@ impl GetMinerData for ESPMiner {
         let wattage = data
             .get(&DataField::Wattage)
             .and_then(|v| v.as_f64())
-            .map(|f| Power::from_watts(f));
+            .map(Power::from_watts);
 
         let average_temperature = data
             .get(&DataField::AverageTemperature)
             .and_then(|v| v.as_f64())
             .map(Temperature::from_celsius);
 
-        let fluid_temperature = data
-            .get(&DataField::FluidTemperature)
-            .and_then(|v| v.as_f64())
-            .map(Temperature::from_celsius);
-
-        // Calculate efficiency if both hashrate and wattage are available (J/TH)
-        let efficiency = match (hashrate.clone(), wattage.clone()) {
-            (Some(hr), Some(w)) => Some(w.as_watts() / (hr.value / 1000.0)),
+        let efficiency = match (hashrate.as_ref(), wattage.as_ref()) {
+            (Some(hr), Some(w)) => {
+                let hashrate_th = hr.value / 1000.0;
+                Some(w.as_watts() / hashrate_th)
+            },
             _ => None,
         };
 
-        // Get current timestamp
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Failed to get system time")
@@ -131,61 +118,115 @@ impl GetMinerData for ESPMiner {
             .and_then(|v| v.as_u64())
             .map(Duration::from_secs);
 
+        // Determine if the miner is actively mining based on hashrate
         let is_mining = hashrate.as_ref().map_or(false, |hr| hr.value > 0.0);
 
-        // Construct hashboards to match Python, assuming BoardData struct definition
+        // Get hardware specifications based on the miner model
+        let miner_hardware = MinerHardware::from(&self.model);
+
         let hashboards = {
-            let voltage = data.get(&DataField::Hashboards).and_then(|hb| hb.get("voltage").and_then(|v| v.as_f64()).and_then(|v| Some(Voltage::from_millivolts(v))));
-            let temp = data.get(&DataField::Hashboards).and_then(|hb| hb.get("temperature")).and_then(|t| t.as_f64()).and_then(|t| Some(Temperature::from_celsius(t)));
-            let frequency = data.get(&DataField::Hashboards).and_then(|hb| hb.get("frequency")).and_then(|f| f.as_f64()).and_then(|f| Some(Frequency::from_megahertz(f)));
-            let hashrate = hashrate.clone();
-            let board_data = BoardData{
+            let board_voltage = data.get(&DataField::Hashboards).and_then(|hashboard_data| {
+                hashboard_data.get("voltage")
+                    .and_then(|voltage_value| voltage_value.as_f64())
+                    .map(Voltage::from_millivolts)
+            });
+            
+            let board_temperature = data
+                .get(&DataField::Hashboards)
+                .and_then(|hashboard_data| hashboard_data.get("vrTemp"))
+                .and_then(|temp_value| temp_value.as_f64())
+                .map(Temperature::from_celsius);
+                
+            let board_frequency = data
+                .get(&DataField::Hashboards)
+                .and_then(|hashboard_data| hashboard_data.get("frequency"))
+                .and_then(|freq_value| freq_value.as_f64())
+                .map(Frequency::from_megahertz);
+                
+            let chip_temperature = data
+                .get(&DataField::Hashboards)
+                .and_then(|hashboard_data| hashboard_data.get("temp"))
+                .and_then(|temp_value| temp_value.as_f64())
+                .map(Temperature::from_celsius);
+                
+            let board_hashrate = hashrate.clone();
+
+            let chip_info = ChipData {
                 position: 0,
-                hashrate,
+                temperature: chip_temperature,
+                voltage: board_voltage,
+                frequency: board_frequency,
+                tuned: None,
+                working: Some(true),
+                hashrate: board_hashrate.clone(),
+            };
+
+            let board_data = BoardData {
+                position: 0,
+                hashrate: board_hashrate,
                 expected_hashrate: None,
-                board_temperature: temp,
+                board_temperature,
                 intake_temperature: None,
                 outlet_temperature: None,
-                expected_chips,
-                working_chips: expected_hashboards.map(|e| e as u16) ,
+                expected_chips: miner_hardware.chips,
+                working_chips: total_chips,
                 serial_number: None,
-                chips: vec![],
-                voltage,
-                frequency,
+                chips: vec![chip_info],
+                voltage: board_voltage,
+                frequency: board_frequency,
                 tuned: None,
-                active: None,
+                active: Some(true),
             };
+            
             vec![board_data]
         };
 
         MinerData {
+            // Version information
             schema_version: env!("CARGO_PKG_VERSION").to_string(),
             timestamp,
+            
+            // Network identification
             ip: self.web.ip.clone().parse().unwrap(),
             mac,
+            
+            // Device identification
             device_info: DeviceInfo::new(BitAxe, self.model.clone(), Stock, HashAlgorithm::SHA256),
             serial_number: None,
             hostname,
+            
+            // Version information
             api_version,
             firmware_version,
             control_board_version,
-            expected_hashboards: None,
+            
+            // Hashboard information
+            expected_hashboards: miner_hardware.boards,
             hashboards,
             hashrate,
-            expected_chips,
+            
+            // Chip information
+            expected_chips: miner_hardware.chips,
             total_chips,
-            expected_fans: Some(1),
+            
+            // Cooling information
+            expected_fans: miner_hardware.fans,
             fans,
             psu_fans: vec![],
             average_temperature,
             fluid_temperature: None,
+            
+            // Power information
             wattage,
             wattage_limit: None,
             efficiency,
+            
+            // Status information
             light_flashing: None,
             messages: vec![],
             uptime,
             is_mining,
+            
             pools: vec![],
         }
     }
@@ -223,7 +264,21 @@ impl GetMinerData for ESPMiner {
                     key: Some("boardVersion"),
                 },
             )],
-            DataField::ExpectedHashboards => &[
+            DataField::Hashboards => &[(
+                SYSTEM_INFO_CMD,
+                DataExtractor {
+                    func: get_by_pointer,
+                    key: Some(""),
+                },
+            )],
+            DataField::Hashrate => &[(
+                SYSTEM_INFO_CMD,
+                DataExtractor {
+                    func: get_by_key,
+                    key: Some("hashRate"),
+                },
+            )],
+            DataField::TotalChips => &[
                 (
                     SYSTEM_INFO_CMD,
                     DataExtractor {
@@ -239,28 +294,6 @@ impl GetMinerData for ESPMiner {
                     },
                 ),
             ],
-            DataField::Hashboards => &[(
-                SYSTEM_INFO_CMD,
-                DataExtractor {
-                    func: get_by_pointer,
-                    key: Some("/"),
-                },
-            )],
-            DataField::Hashrate => &[(
-                SYSTEM_INFO_CMD,
-                DataExtractor {
-                    func: get_by_key,
-                    key: Some("hashRate"),
-                },
-            )],
-            DataField::TotalChips => &[(
-                SYSTEM_INFO_CMD,
-                DataExtractor {
-                    func: get_by_key,
-                    key: Some("smallCoreCount"),
-                },
-            )],
-            DataField::ExpectedFans => &[],
             DataField::Fans => &[(
                 SYSTEM_INFO_CMD,
                 DataExtractor {
