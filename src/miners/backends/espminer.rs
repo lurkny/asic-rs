@@ -168,7 +168,7 @@ impl GetMinerData for ESPMiner {
 
         let pools = {
             let main_url =
-                data.extract_nested_or::<String>(DataField::Pools, "stratumUrl", String::new());
+                data.extract_nested_or::<String>(DataField::Pools, "stratumURL", String::new());
             let main_port = data.extract_nested_or::<u64>(DataField::Pools, "stratumPort", 0);
             let accepted_share = data.extract_nested::<u64>(DataField::Pools, "sharesAccepted");
             let rejected_share = data.extract_nested::<u64>(DataField::Pools, "sharesRejected");
