@@ -141,7 +141,7 @@ impl GetMinerData for ESPMiner {
                 temperature: chip_temperature,
                 voltage: board_voltage,
                 frequency: board_frequency,
-                tuned: None,
+                tuned: Some(true),
                 working: Some(true),
                 hashrate: board_hashrate.clone(),
             };
