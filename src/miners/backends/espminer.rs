@@ -13,6 +13,7 @@ use crate::data::device::{DeviceInfo, HashAlgorithm, MinerHardware, MinerModel};
 use crate::data::fan::FanData;
 use crate::data::hashrate::{HashRate, HashRateUnit};
 use crate::data::miner::MinerData;
+use crate::data::pool::{PoolData, PoolScheme, PoolURL};
 use crate::miners::api::web::esp_web_api::EspWebApi;
 use crate::miners::backends::traits::GetMinerData;
 use crate::miners::data::{
@@ -181,6 +182,58 @@ impl GetMinerData for ESPMiner {
             vec![board_data]
         };
 
+        let pools = {
+
+            let main_url = data.get(&DataField::Pools).and_then(|r| r.get("stratumUrl")).and_then(|s| s.as_str()).unwrap_or("").to_string();
+            let main_port = data.get(&DataField::Pools).and_then(|r| r.get("stratumPort")).and_then(|s| s.as_u64()).unwrap_or(0);
+            let accepted_share = data.get(&DataField::Pools).and_then(|r| r.get("sharesAccepted")).and_then(|s| s.as_u64());
+            let rejected_share = data.get(&DataField::Pools).and_then(|r| r.get("sharesRejected")).and_then(|s| s.as_u64());
+            let is_using_fallback = data.get(&DataField::Pools)
+                .and_then(|r| r.get("isUsingFallbackStratum"))
+                .and_then(|s| {
+                    s.as_bool().or_else(|| {
+                        s.as_u64().map(|n| n != 0)
+                    })
+                }).unwrap_or(false);
+
+            let main_pool_url = PoolURL {
+                scheme: PoolScheme::StratumV1,
+                host: main_url,
+                port: main_port as u16,
+                pubkey: None,
+            };
+            let main_pool_data = PoolData {
+                position: Some(0),
+                url: Some(main_pool_url),
+                accepted_shares: accepted_share,
+                rejected_shares: rejected_share,
+                active: Some(!is_using_fallback),
+                alive: None,
+                user: None,
+            };
+
+            let fallback_url = data.get(&DataField::Pools).and_then(|r| r.get("fallbackStratumURL")).and_then(|s| s.as_str()).unwrap_or("").to_string();
+            let fallback_port  = data.get(&DataField::Pools).and_then(|r| r.get("fallbackStratumPort")).and_then(|s| s.as_u64()).unwrap_or(0);
+
+            let fallback_pool_url = PoolURL {
+                scheme: PoolScheme::StratumV1,
+                host: fallback_url,
+                port: fallback_port as u16,
+                pubkey: None,
+            };
+            let fallback_pool_data = PoolData {
+                position: Some(1),
+                url: Some(fallback_pool_url),
+                accepted_shares: accepted_share,
+                rejected_shares: rejected_share,
+                active: Some(is_using_fallback),
+                alive: None,
+                user: None,
+            };
+
+            vec![main_pool_data, fallback_pool_data]
+        };
+
         MinerData {
             // Version information
             schema_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -227,7 +280,7 @@ impl GetMinerData for ESPMiner {
             uptime,
             is_mining,
             
-            pools: vec![],
+            pools,
         }
     }
 
@@ -322,6 +375,13 @@ impl GetMinerData for ESPMiner {
                     key: Some("uptimeSeconds"),
                 },
             )],
+            DataField::Pools => &[(
+                SYSTEM_INFO_CMD,
+                DataExtractor {
+                    func: get_by_pointer,
+                    key: Some(""),
+                },
+                )],
             _ => &[],
         }
     }
